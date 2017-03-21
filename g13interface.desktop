@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=G13
+Comment=An interface to run/program the software to interact with the Logitech G13 keyboard
+Exec=gksudo -k -u root /usr/local/bin/g13interface
+Icon=/usr/local/bin/g13logo.png
+Terminal=false
+Type=Application
+StartupNotify=true
+Keywords=g13;
+Categories=Applications

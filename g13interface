@@ -1,0 +1,540 @@
+#!/usr/bin/python
+import sys, os, subprocess
+from PyQt4 import QtCore, QtGui
+
+# --- Variables -----------------------------------------------------------------------------------
+
+# Packets that must be installed:
+#	- sudo apt-get install gksu
+#   	- PyQt4
+
+# --- Variables -----------------------------------------------------------------------------------
+
+special_keys = { 16777264 : 'F1',         16777222 : 'KP0',        16777235 : 'UP',
+                 16777265 : 'F2',         16777233 : 'KP1',        16777237 : 'DOWN',
+                 16777266 : 'F3',         16777237 : 'KP2',        16777234 : 'LEFT',
+                 16777267 : 'F4',         16777239 : 'KP3',        16777236 : 'RIGHT',
+                 16777268 : 'F5',         16777234 : 'KP4',        16777222 : 'INSERT',
+                 16777269 : 'F6',         16777227 : 'KP5',        16777232 : 'HOME',
+                 16777270 : 'F7',         16777236 : 'KP6',        16777238 : 'PAGEUP',
+                 16777271 : 'F8',         16777232 : 'KP7',        16777223 : 'DELETE',
+                 16777272 : 'F9',         16777235 : 'KP8',        16777233 : 'END',
+                 16777273 : 'F10',        16777238 : 'KP9',        16777239 : 'PAGEDOWN',
+                 16777274 : 'F11',        16777223 : 'KPDOT',      16777217 : 'TAB',
+                 16777275 : 'F12',        43       : 'KPPLUS',     16777220 : 'ENTER',
+                       32 : 'SPACE',      42       : 'KPASTERISK', 16777252 : 'CAPSLOCK',
+                 16777219 : 'BACKSPACE',  45       : 'KPMINUS',    16777253 : 'NUMLOCK',
+                 16777216 : 'ESC',        16777251 : 'LEFTALT',    16781571 : 'RIGHTALT',
+                 16777249 : 'LEFTCTRL',   16777248 : 'LEFTSHIFT',  'uk1'    : 'SLASH',
+                 'uk2'    : 'RIGHTBRACE', 'uk3'    : 'SCROLLLOCK', 'uk4'    : 'BACKSLASH',
+                 'uk5'    : 'SEMICOLON',  'uk6'    : 'APOSTROPHE', 'uk7'    : 'LEFTBRACE',
+                 'uk8'    : 'DOT',        'uk9'    : 'COMMA',      'uk10'   : 'EQUAL',
+                 'uk11'   : 'GRAVE',      'uk12'   : 'MINUS',      'uk13'   : 'RIGHTCTRL',
+                 'uk14'   : 'RIGHTSHIFT'}
+
+# --- Functions -----------------------------------------------------------------------------------
+
+def createVerticalText(ind):
+	ud = ''
+	for c in ind:
+		ud += c + '\n'
+	return ud[:-1]
+
+# --- Classes -------------------------------------------------------------------------------------
+
+class StartQT4(QtGui.QMainWindow):
+
+    def __init__(self, parent=None):
+        QtGui.QWidget.__init__(self, parent)
+        self.ui = Ui_Window(self)
+        self.ui.setupUi(self)
+        self.keyNames = True
+        itemList = []
+        self.setWindowIcon(QtGui.QIcon('g13logo.png'))
+        for i in self.loadCfg():
+            item = QtGui.QTreeWidgetItem(i)
+            itemList.append(item)
+            item.setFlags(QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+        self.ui.tv_bindings.addTopLevelItems(itemList)
+        self.checkProcess()
+
+
+    def loadCfg(self):
+        """ Loads file and returns a list of configurations """
+        objFile = open('/usr/local/bin/defaults.bind', 'r')
+        fileContents = objFile.read()
+        objFile.close()
+        cfg = fileContents.split('\n')
+        cfgData = []
+        for i in cfg:
+            if i.startswith('bind '):
+                bind, gKey, kbKey = i.split(' ')
+                cfgData.append([gKey, kbKey.rstrip('\n')])
+        return cfgData
+
+
+    def pushButtonClicked(self, but_id, button):
+        """ Deselects all, selects clicked button """
+        self.ui.tv_bindings.clearSelection()
+        lstMatch = self.ui.tv_bindings.findItems(but_id, QtCore.Qt.MatchExactly, 0)[0]
+        self.ui.tv_bindings.setItemSelected(lstMatch, True)
+        lstMatch.setText(1, '[Press a key]')
+        button.installEventFilter(self)
+        self.efButton = button                # Not elegant, but.... works
+
+
+    def eventFilter(self, object, event):
+        """ Gets the key, assigns it and removes self """
+        if event.type() == QtCore.QEvent.KeyPress:
+            if event.key() >= 48 and event.key() <= 57:        # 0-9
+                kbKey = 'KEY_' + chr(event.key())
+            elif event.key() >= 65 and event.key() <= 90:      # A-Z
+                kbKey = 'KEY_' + chr(event.key())
+            elif event.key() in special_keys:                  # special_keys
+                kbKey = 'KEY_' + special_keys[event.key()]
+            else:
+                kbKey = 'None'
+            # should not have to search for it... dunno how else to access item?
+            lstMatch = self.ui.tv_bindings.findItems('[Press a key]', QtCore.Qt.MatchExactly, 1)[0]
+            g13Key = lstMatch.text(0)
+            lstMatch.setText(1, kbKey)
+            if not self.keyNames:
+                self.efButton.setText(kbKey[4:])
+            self.ui.tv_bindings.removeEventFilter(self)
+            self.efButton.removeEventFilter(self)
+            # Update config
+            self.writeFile()
+            self.writePipe('bind ' + g13Key + ' ' + kbKey)
+        return False
+
+
+    def activateButtonClicked(self):
+        """ Event for the activateButton (Do stuff, explain) """
+        print "trying to start process..."
+        subprocess.Popen("/usr/local/bin/g13d --config /usr/local/bin/defaults.bind", shell=True)
+        self.checkProcess()
+
+
+    def toggleNamesButtonClicked(self):
+        """ Changes names of buttons to ButtonNames / ButtonValues """
+        nameTable = {}
+        if self.keyNames:
+            for i in self.loadCfg():
+                nameTable[i[0]] = i[1][4:]
+            self.keyNames = False
+        else:
+            for i in self.loadCfg():
+                nameTable[i[0]] = i[0]
+            self.keyNames = True
+        self.ui.but_g1.setText(nameTable["G1"])
+        self.ui.but_g2.setText(nameTable["G2"])
+        self.ui.but_g3.setText(nameTable["G3"])
+        self.ui.but_g4.setText(nameTable["G4"])
+        self.ui.but_g5.setText(nameTable["G5"])
+        self.ui.but_g6.setText(nameTable["G6"])
+        self.ui.but_g7.setText(nameTable["G7"])
+        self.ui.but_g8.setText(nameTable["G8"])
+        self.ui.but_g9.setText(nameTable["G9"])
+        self.ui.but_g10.setText(nameTable["G10"])
+        self.ui.but_g11.setText(nameTable["G11"])
+        self.ui.but_g12.setText(nameTable["G12"])
+        self.ui.but_g13.setText(nameTable["G13"])
+        self.ui.but_g14.setText(nameTable["G14"])
+        self.ui.but_g15.setText(nameTable["G15"])
+        self.ui.but_g16.setText(nameTable["G16"])
+        self.ui.but_g17.setText(nameTable["G17"])
+        self.ui.but_g18.setText(nameTable["G18"])
+        self.ui.but_g19.setText(nameTable["G19"])
+        self.ui.but_g20.setText(nameTable["G20"])
+        self.ui.but_g21.setText(nameTable["G21"])
+        self.ui.but_g22.setText(nameTable["G22"])
+        self.ui.but_m1.setText(nameTable["M1"])
+        self.ui.but_m2.setText(nameTable["M2"])
+        self.ui.but_m3.setText(nameTable["M3"])
+        self.ui.but_mr.setText(nameTable["MR"])
+        self.ui.but_l1.setText(nameTable["L1"])
+        self.ui.but_l2.setText(nameTable["L2"])
+        self.ui.but_l3.setText(nameTable["L3"])
+        self.ui.but_l4.setText(nameTable["L4"])
+        self.ui.but_down.setText(nameTable["DOWN"])
+        self.ui.but_stickTop.setText(nameTable["TOP"])
+        nameTable["LEFT"] = createVerticalText(nameTable["LEFT"])
+        self.ui.but_left.setText(nameTable["LEFT"])
+        if nameTable["STICK_UP"] == "STICK_UP":
+            nameTable["STICK_UP"] = "UP"
+        self.ui.but_stickUp.setText(nameTable["STICK_UP"])
+        if nameTable["STICK_DOWN"] == "STICK_DOWN":
+            nameTable["STICK_DOWN"] = "DOWN"
+        self.ui.but_stickDown.setText(nameTable["STICK_DOWN"])
+        if nameTable["STICK_LEFT"] == "STICK_LEFT":
+            nameTable["STICK_LEFT"] = "L"
+        else:
+            nameTable["STICK_LEFT"] = createVerticalText(nameTable["STICK_LEFT"])
+        self.ui.but_stickLeft.setText(nameTable["STICK_LEFT"])
+        if nameTable["STICK_RIGHT"] == "STICK_RIGHT":
+            nameTable["STICK_RIGHT"] = "R"
+        else:
+            nameTable["STICK_RIGHT"] = createVerticalText(nameTable["STICK_RIGHT"])
+        self.ui.but_stickRight.setText(nameTable["STICK_RIGHT"])
+
+
+    def resetNamesButtonClicked(self):
+        """ Binds each key to None """
+        self.writeFile(True)
+        for key, binding in self.loadCfg():
+            self.writePipe('bind ' + key + ' None')
+        while self.ui.tv_bindings.topLevelItemCount() > 0:
+            self.ui.tv_bindings.takeTopLevelItem(0)
+        itemList = []
+        for i in self.loadCfg():
+            item = QtGui.QTreeWidgetItem(i)
+            itemList.append(item)
+            item.setFlags(QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+        self.ui.tv_bindings.addTopLevelItems(itemList)
+        self.ui.but_g1.setText("")
+        self.ui.but_g2.setText("")
+        self.ui.but_g3.setText("")
+        self.ui.but_g4.setText("")
+        self.ui.but_g5.setText("")
+        self.ui.but_g6.setText("")
+        self.ui.but_g7.setText("")
+        self.ui.but_g8.setText("")
+        self.ui.but_g9.setText("")
+        self.ui.but_g10.setText("")
+        self.ui.but_g11.setText("")
+        self.ui.but_g12.setText("")
+        self.ui.but_g13.setText("")
+        self.ui.but_g14.setText("")
+        self.ui.but_g15.setText("")
+        self.ui.but_g16.setText("")
+        self.ui.but_g17.setText("")
+        self.ui.but_g18.setText("")
+        self.ui.but_g19.setText("")
+        self.ui.but_g20.setText("")
+        self.ui.but_g21.setText("")
+        self.ui.but_g22.setText("")
+        self.ui.but_m1.setText("")
+        self.ui.but_m2.setText("")
+        self.ui.but_m3.setText("")
+        self.ui.but_mr.setText("")
+        self.ui.but_l1.setText("")
+        self.ui.but_l2.setText("")
+        self.ui.but_l3.setText("")
+        self.ui.but_l4.setText("")
+
+
+    def checkProcess(self):
+        """ Determines whether g13d is running or not """
+        process = subprocess.Popen("ps -A | grep g13d", stdout=subprocess.PIPE, shell=True)
+        out, err = process.communicate()
+        if out != '':
+            self.ui.but_activate.setEnabled(False)
+            self.ui.lab_active.setText("Running ok")
+            self.ui.lab_active.setStyleSheet("QLabel { background-color : none; color : green; }");
+        else:
+            self.ui.but_activate.setEnabled(True)
+            self.ui.lab_active.setText("Not Started")
+            self.ui.lab_active.setStyleSheet("QLabel { background-color : none; color : red; }");
+
+
+    def writeFile(self, reset = False):
+        """ writes all items from list to file, overwriting old file """
+        objFile = open('/usr/local/bin/defaults.bind', 'w')
+        objFile.truncate()
+        root = self.ui.tv_bindings.invisibleRootItem()
+        childCount = root.childCount()
+        for c in range(childCount):
+            if root.child(c).text(1) == '[Press a key]' or reset:
+                kbKey = 'None'
+            else:
+                kbKey = root.child(c).text(1)
+            objFile.write('bind ' + root.child(c).text(0) + ' ' + kbKey + '\n')
+        objFile.close()
+
+
+    def writePipe(self, data):
+        """ writes data to pipe """
+        if not '[Press a key]' in data:
+            subprocess.Popen("echo " + str(data) + " > /tmp/g13-0", shell=True)
+
+
+    def itemEdited(self, item):
+        """ called as event when a row is manually changed """
+        self.writeFile()
+        self.writePipe('bind ' + item.text(0) + ' ' + item.text(1))
+
+
+class Ui_Window(object):
+
+    def __init__(self, parent):
+        self.parent = parent
+
+    def setupUi(self, Window):
+        Window.setObjectName("Window")
+        Window.setWindowTitle("G13 Keys")
+        Window.resize(800, 620)
+        sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Fixed, QtGui.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(Window.sizePolicy().hasHeightForWidth())
+        Window.setSizePolicy(sizePolicy)
+        Window.setMinimumSize(QtCore.QSize(800, 620))
+        Window.setMaximumSize(QtCore.QSize(800, 620))
+        self.but_g1 = QtGui.QPushButton(Window)
+        self.but_g1.setGeometry(QtCore.QRect(30, 90, 41, 41))
+        self.but_g1.setObjectName("but_g1")
+        self.but_g1.setText("G1")
+        self.but_g1.clicked.connect(lambda: self.parent.pushButtonClicked('G1', self.but_g1))
+        self.but_g2 = QtGui.QPushButton(Window)
+        self.but_g2.setGeometry(QtCore.QRect(80, 90, 41, 41))
+        self.but_g2.setObjectName("but_g2")
+        self.but_g2.setText("G2")
+        self.but_g2.clicked.connect(lambda: self.parent.pushButtonClicked('G2', self.but_g2))
+        self.but_g3 = QtGui.QPushButton(Window)
+        self.but_g3.setGeometry(QtCore.QRect(130, 90, 41, 41))
+        self.but_g3.setObjectName("but_g3")
+        self.but_g3.setText("G3")
+        self.but_g3.clicked.connect(lambda: self.parent.pushButtonClicked('G3', self.but_g3))
+        self.but_g4 = QtGui.QPushButton(Window)
+        self.but_g4.setGeometry(QtCore.QRect(180, 90, 41, 41))
+        self.but_g4.setObjectName("but_g4")
+        self.but_g4.setText("G4")
+        self.but_g4.clicked.connect(lambda: self.parent.pushButtonClicked('G4', self.but_g4))
+        self.but_g5 = QtGui.QPushButton(Window)
+        self.but_g5.setGeometry(QtCore.QRect(230, 90, 41, 41))
+        self.but_g5.setObjectName("but_g5")
+        self.but_g5.setText("G5")
+        self.but_g5.clicked.connect(lambda: self.parent.pushButtonClicked('G5', self.but_g5))
+        self.but_g6 = QtGui.QPushButton(Window)
+        self.but_g6.setGeometry(QtCore.QRect(280, 90, 41, 41))
+        self.but_g6.setObjectName("but_g6")
+        self.but_g6.setText("G6")
+        self.but_g6.clicked.connect(lambda: self.parent.pushButtonClicked('G6', self.but_g6))
+        self.but_g7 = QtGui.QPushButton(Window)
+        self.but_g7.setGeometry(QtCore.QRect(330, 90, 41, 41))
+        self.but_g7.setObjectName("but_g7")
+        self.but_g7.setText("G7")
+        self.but_g7.clicked.connect(lambda: self.parent.pushButtonClicked('G7', self.but_g7))
+        self.but_g8 = QtGui.QPushButton(Window)
+        self.but_g8.setGeometry(QtCore.QRect(30, 140, 41, 41))
+        self.but_g8.setObjectName("but_g8")
+        self.but_g8.setText("G8")
+        self.but_g8.clicked.connect(lambda: self.parent.pushButtonClicked('G8', self.but_g8))
+        self.but_g9 = QtGui.QPushButton(Window)
+        self.but_g9.setGeometry(QtCore.QRect(80, 140, 41, 41))
+        self.but_g9.setObjectName("but_g9")
+        self.but_g9.setText("G9")
+        self.but_g9.clicked.connect(lambda: self.parent.pushButtonClicked('G9', self.but_g9))
+        self.but_g10 = QtGui.QPushButton(Window)
+        self.but_g10.setGeometry(QtCore.QRect(130, 140, 41, 41))
+        self.but_g10.setObjectName("but_g10")
+        self.but_g10.setText("G10")
+        self.but_g10.clicked.connect(lambda: self.parent.pushButtonClicked('G10', self.but_g10))
+        self.but_g11 = QtGui.QPushButton(Window)
+        self.but_g11.setGeometry(QtCore.QRect(180, 140, 41, 41))
+        self.but_g11.setObjectName("but_g11")
+        self.but_g11.setText("G11")
+        self.but_g11.clicked.connect(lambda: self.parent.pushButtonClicked('G11', self.but_g11))
+        self.but_g12 = QtGui.QPushButton(Window)
+        self.but_g12.setGeometry(QtCore.QRect(230, 140, 41, 41))
+        self.but_g12.setObjectName("but_g12")
+        self.but_g12.setText("G12")
+        self.but_g12.clicked.connect(lambda: self.parent.pushButtonClicked('G12', self.but_g12))
+        self.but_g13 = QtGui.QPushButton(Window)
+        self.but_g13.setGeometry(QtCore.QRect(280, 140, 41, 41))
+        self.but_g13.setObjectName("but_g13")
+        self.but_g13.setText("G13")
+        self.but_g13.clicked.connect(lambda: self.parent.pushButtonClicked('G13', self.but_g13))
+        self.but_g14 = QtGui.QPushButton(Window)
+        self.but_g14.setGeometry(QtCore.QRect(330, 140, 41, 41))
+        self.but_g14.setObjectName("but_g14")
+        self.but_g14.setText("G14")
+        self.but_g14.clicked.connect(lambda: self.parent.pushButtonClicked('G14', self.but_g14))
+        self.but_g15 = QtGui.QPushButton(Window)
+        self.but_g15.setGeometry(QtCore.QRect(80, 190, 41, 41))
+        self.but_g15.setObjectName("but_g15")
+        self.but_g15.setText("G15")
+        self.but_g15.clicked.connect(lambda: self.parent.pushButtonClicked('G15', self.but_g15))
+        self.but_g16 = QtGui.QPushButton(Window)
+        self.but_g16.setGeometry(QtCore.QRect(130, 190, 41, 41))
+        self.but_g16.setObjectName("but_g16")
+        self.but_g16.setText("G16")
+        self.but_g16.clicked.connect(lambda: self.parent.pushButtonClicked('G16', self.but_g16))
+        self.but_g17 = QtGui.QPushButton(Window)
+        self.but_g17.setGeometry(QtCore.QRect(180, 190, 41, 41))
+        self.but_g17.setObjectName("but_g17")
+        self.but_g17.setText("G17")
+        self.but_g17.clicked.connect(lambda: self.parent.pushButtonClicked('G17', self.but_g17))
+        self.but_g18 = QtGui.QPushButton(Window)
+        self.but_g18.setGeometry(QtCore.QRect(230, 190, 41, 41))
+        self.but_g18.setObjectName("but_g18")
+        self.but_g18.setText("G18")
+        self.but_g18.clicked.connect(lambda: self.parent.pushButtonClicked('G18', self.but_g18))
+        self.but_g19 = QtGui.QPushButton(Window)
+        self.but_g19.setGeometry(QtCore.QRect(280, 190, 41, 41))
+        self.but_g19.setObjectName("but_g19")
+        self.but_g19.setText("G19")
+        self.but_g19.clicked.connect(lambda: self.parent.pushButtonClicked('G19', self.but_g19))
+        self.but_g20 = QtGui.QPushButton(Window)
+        self.but_g20.setGeometry(QtCore.QRect(130, 240, 41, 41))
+        self.but_g20.setObjectName("but_g20")
+        self.but_g20.setText("G20")
+        self.but_g20.clicked.connect(lambda: self.parent.pushButtonClicked('G20', self.but_g20))
+        self.but_g21 = QtGui.QPushButton(Window)
+        self.but_g21.setGeometry(QtCore.QRect(180, 240, 41, 41))
+        self.but_g21.setObjectName("but_g21")
+        self.but_g21.setText("G21")
+        self.but_g21.clicked.connect(lambda: self.parent.pushButtonClicked('G21', self.but_g21))
+        self.but_g22 = QtGui.QPushButton(Window)
+        self.but_g22.setGeometry(QtCore.QRect(230, 240, 41, 41))
+        self.but_g22.setObjectName("but_g22")
+        self.but_g22.setText("G22")
+        self.but_g22.clicked.connect(lambda: self.parent.pushButtonClicked('G22', self.but_g22))
+        self.but_m1 = QtGui.QPushButton(Window)
+        self.but_m1.setGeometry(QtCore.QRect(40, 50, 81, 21))
+        self.but_m1.setObjectName("but_m1")
+        self.but_m1.setText("M1")
+        self.but_m1.clicked.connect(lambda: self.parent.pushButtonClicked('M1', self.but_m1))
+        self.but_m2 = QtGui.QPushButton(Window)
+        self.but_m2.setGeometry(QtCore.QRect(120, 50, 81, 21))
+        self.but_m2.setObjectName("but_m2")
+        self.but_m2.setText("M2")
+        self.but_m2.clicked.connect(lambda: self.parent.pushButtonClicked('M2', self.but_m2))
+        self.but_m3 = QtGui.QPushButton(Window)
+        self.but_m3.setGeometry(QtCore.QRect(200, 50, 81, 21))
+        self.but_m3.setObjectName("but_m3")
+        self.but_m3.setText("M3")
+        self.but_m3.clicked.connect(lambda: self.parent.pushButtonClicked('M3', self.but_m3))
+        self.but_mr = QtGui.QPushButton(Window)
+        self.but_mr.setGeometry(QtCore.QRect(280, 50, 81, 21))
+        self.but_mr.setObjectName("but_mr")
+        self.but_mr.setText("MR")
+        self.but_mr.clicked.connect(lambda: self.parent.pushButtonClicked('MR', self.but_mr))
+        self.but_l1 = QtGui.QPushButton(Window)
+        self.but_l1.setGeometry(QtCore.QRect(80, 15, 60, 20))
+        self.but_l1.setObjectName("but_l1")
+        self.but_l1.setText("L1")
+        self.but_l1.clicked.connect(lambda: self.parent.pushButtonClicked('L1', self.but_l1))
+        self.but_l2 = QtGui.QPushButton(Window)
+        self.but_l2.setGeometry(QtCore.QRect(140, 15, 60, 20))
+        self.but_l2.setObjectName("but_l2")
+        self.but_l2.setText("L2")
+        self.but_l2.clicked.connect(lambda: self.parent.pushButtonClicked('L2', self.but_l2))
+        self.but_l3 = QtGui.QPushButton(Window)
+        self.but_l3.setGeometry(QtCore.QRect(200, 15, 60, 20))
+        self.but_l3.setObjectName("but_l3")
+        self.but_l3.setText("L3")
+        self.but_l3.clicked.connect(lambda: self.parent.pushButtonClicked('L3', self.but_l3))
+        self.but_l4 = QtGui.QPushButton(Window)
+        self.but_l4.setGeometry(QtCore.QRect(260, 15, 60, 20))
+        self.but_l4.setObjectName("but_l4")
+        self.but_l4.setText("L4")
+        self.but_l4.clicked.connect(lambda: self.parent.pushButtonClicked('L4', self.but_l4))
+        self.but_left = QtGui.QPushButton(Window)
+        self.but_left.setGeometry(QtCore.QRect(330, 250, 31, 81))
+        self.but_left.setObjectName("but_left")
+        self.but_left.setText("L\ne\nf\nt")
+        self.but_left.clicked.connect(lambda: self.parent.pushButtonClicked('LEFT', self.but_left))
+        self.but_down = QtGui.QPushButton(Window)
+        self.but_down.setGeometry(QtCore.QRect(360, 335, 81, 31))
+        self.but_down.setObjectName("but_down")
+        self.but_down.setText("Down")
+        self.but_down.clicked.connect(lambda: self.parent.pushButtonClicked('DOWN', self.but_down))
+        self.but_stickTop = QtGui.QPushButton(Window)
+        self.but_stickTop.setGeometry(QtCore.QRect(390, 256, 50, 50))
+        self.but_stickTop.setObjectName("but_stickTop")
+        self.but_stickTop.setText("Top")
+        self.but_stickTop.clicked.connect(lambda: self.parent.pushButtonClicked('TOP', self.but_stickTop))
+        self.but_stickUp = QtGui.QPushButton(Window)
+        self.but_stickUp.setGeometry(QtCore.QRect(390, 236, 51, 16))
+        self.but_stickUp.setObjectName("but_stickUp")
+        self.but_stickUp.setText("Up")
+        self.but_stickUp.clicked.connect(lambda: self.parent.pushButtonClicked('STICK_UP', self.but_stickUp))
+        self.but_stickDown = QtGui.QPushButton(Window)
+        self.but_stickDown.setGeometry(QtCore.QRect(390, 310, 51, 16))
+        self.but_stickDown.setObjectName("but_stickDown")
+        self.but_stickDown.setText("Down")
+        self.but_stickDown.clicked.connect(lambda: self.parent.pushButtonClicked('STICK_DOWN', self.but_stickDown))
+        self.but_stickRight = QtGui.QPushButton(Window)
+        self.but_stickRight.setGeometry(QtCore.QRect(444, 256, 20, 51))
+        self.but_stickRight.setObjectName("but_stickRight")
+        self.but_stickRight.setText("R")
+        self.but_stickRight.clicked.connect(lambda: self.parent.pushButtonClicked('STICK_RIGHT', self.but_stickRight))
+        self.but_stickLeft = QtGui.QPushButton(Window)
+        self.but_stickLeft.setGeometry(QtCore.QRect(366, 256, 20, 51))
+        self.but_stickLeft.setObjectName("but_stickLeft")
+        self.but_stickLeft.setText("L")
+        self.but_stickLeft.clicked.connect(lambda: self.parent.pushButtonClicked('STICK_LEFT', self.but_stickLeft))
+        self.but_activate = QtGui.QPushButton(Window)
+        self.but_activate.setGeometry(QtCore.QRect(20, 550, 430, 50))
+        self.but_activate.setObjectName("but_activate")
+        self.but_activate.setText("Activate G13")
+        self.but_activate.clicked.connect(self.parent.activateButtonClicked)
+        self.but_toggleNames = QtGui.QPushButton(Window)
+        self.but_toggleNames.setGeometry(QtCore.QRect(20, 400, 150, 30))
+        self.but_toggleNames.setObjectName("but_changeNames")
+        self.but_toggleNames.setText("Toggle Button Names")
+        self.but_toggleNames.clicked.connect(self.parent.toggleNamesButtonClicked)
+        self.but_resetKeys = QtGui.QPushButton(Window)
+        self.but_resetKeys.setGeometry(QtCore.QRect(20, 440, 150, 30))
+        self.but_resetKeys.setObjectName("but_resetKeys")
+        self.but_resetKeys.setText("Reset All Keys")
+        self.but_resetKeys.clicked.connect(self.parent.resetNamesButtonClicked)
+        self.tv_bindings = QtGui.QTreeWidget(Window)
+        self.tv_bindings.setGeometry(QtCore.QRect(470, 20, 310, 580))
+        self.tv_bindings.setObjectName("tv_bindings")
+        header = QtGui.QTreeWidgetItem(["G13 Key","Keyboard Key"])
+        header.setTextAlignment(0, QtCore.Qt.AlignCenter )
+        header.setTextAlignment(1, QtCore.Qt.AlignCenter)
+        self.tv_bindings.setHeaderItem(header)
+        self.tv_bindings.setColumnWidth(0,145)
+        self.tv_bindings.setColumnWidth(1,145)
+        font = QtGui.QFont()
+        font.setPointSize(9)
+        self.tv_bindings.setFont(font)
+        self.tv_bindings.itemChanged.connect(self.parent.itemEdited)
+        self.lab_status = QtGui.QLabel(Window)
+        self.lab_status.setGeometry(QtCore.QRect(30, 500, 170, 31))
+        font = QtGui.QFont()
+        font.setPointSize(22)
+        self.lab_status.setFont(font)
+        self.lab_status.setObjectName("lab_status")
+        self.lab_status.setText("Activate G13")
+        self.lab_active = QtGui.QLabel(Window)
+        self.lab_active.setGeometry(QtCore.QRect(210, 500, 200, 31))
+        font = QtGui.QFont()
+        font.setPointSize(18)
+        self.lab_active.setFont(font)
+        self.lab_active.setObjectName("lab_active")
+        QtCore.QMetaObject.connectSlotsByName(Window)
+
+
+# --- Main ----------------------------------------------------------------------------------------
+
+# die if not root. MUST be. in order to gain write access to usb device, g13 hardware
+if os.getuid() != 0:
+    sys.exit('\n  Must be run with admin priviliges\n')
+
+# die if not installed
+if not os.path.exists('/usr/local/bin/g13d') or not os.path.exists('/usr/local/bin/defaults.bind'):
+    sys.exit('\n  "g13d" and "defaults.bind" must be installed to "/usr/local/bin/" \n')
+
+if __name__ == "__main__":
+    app = QtGui.QApplication(sys.argv)
+    g13if = StartQT4()
+    g13if.show()
+    sys.exit(app.exec_())
+
+
+# --- TODO ----------------------------------------------------------------------------------------
+
+# - Not all keys known (English keyboard)
+# - use custom .bind-files? Load from cmd?
+# - Cursor-Keys are identified as KP (Error in QT?)
+
+
+
+
+
+
+
