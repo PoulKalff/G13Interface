@@ -1,0 +1,16 @@
+[Unit]
+Description=G13 Driver Daemon
+After=syslog.target network.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/usr/local/bin/g13d --config /usr/local/bin/defaults.bind
+TimeoutStopSec=20
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
