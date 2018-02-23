@@ -531,7 +531,7 @@ if __name__ == "__main__":
 # - Not all keys known (English keyboard)
 # - use custom .bind-files? Load from cmd?
 # - Cursor-Keys are identified as KP (Error in QT?)
-
+# - gksudo must be installed, but this is not checked
 
 
 
