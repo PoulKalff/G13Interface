@@ -1,7 +1,7 @@
 #!/bin/bash
 cp defaults.bind /usr/local/bin/
 cd g13
-make
+#make
 cp g13d /usr/local/bin/
 cd ..
 cp g13interface /usr/local/bin/
