@@ -5,12 +5,6 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 # --- Variables -----------------------------------------------------------------------------------
 
-# Packets that must be installed:
-#	- sudo apt-get install gksu
-#   	- PyQt4
-
-# --- Variables -----------------------------------------------------------------------------------
-
 special_keys = { 16777264 : 'F1',         16777222 : 'KP0',        16777235 : 'UP',
                  16777265 : 'F2',         16777233 : 'KP1',        16777237 : 'DOWN',
                  16777266 : 'F3',         16777237 : 'KP2',        16777234 : 'LEFT',
@@ -78,7 +72,7 @@ class StartQT5(QtWidgets.QMainWindow):
         """ Deselects all, selects clicked button """
         self.ui.tv_bindings.clearSelection()
         lstMatch = self.ui.tv_bindings.findItems(but_id, QtCore.Qt.MatchExactly, 0)[0]
-        self.ui.tv_bindings.setItemSelected(lstMatch, True)
+        lstMatch.setSelected(True)
         lstMatch.setText(1, '[Press a key]')
         button.installEventFilter(self)
         self.efButton = button                # Not elegant, but.... works
@@ -445,6 +439,9 @@ class Ui_Window(object):
         self.but_stickTop.setGeometry(QtCore.QRect(390, 256, 50, 50))
         self.but_stickTop.setObjectName("but_stickTop")
         self.but_stickTop.setText("Top")
+
+# 'QTreeWidget' object has no attribute 'setItemSelected'
+
         self.but_stickTop.clicked.connect(lambda: self.parent.pushButtonClicked('TOP', self.but_stickTop))
         self.but_stickUp = PyQt5.QtWidgets.QPushButton(Window)
         self.but_stickUp.setGeometry(QtCore.QRect(390, 236, 51, 16))
@@ -535,7 +532,6 @@ if __name__ == "__main__":
 # - Not all keys known (English keyboard)
 # - use custom .bind-files? Load from cmd?
 # - Cursor-Keys are identified as KP (Error in QT?)
-# - gksudo must be installed, but this is not checked
 
 
 
